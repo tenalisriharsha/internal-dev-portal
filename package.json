@@ -1,0 +1,21 @@
+{
+  "name": "internal-dev-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A lightweight Backstage-style internal developer platform: service catalog, ownership/on-call, dependency graph, and self-service golden-path scaffolding.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "dev:web": "npm run dev --workspace=@idp/web",
+    "lint": "tsc --build --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
