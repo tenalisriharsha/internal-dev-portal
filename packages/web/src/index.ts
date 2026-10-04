@@ -5,6 +5,7 @@ const repoRoot = path.resolve(__dirname, "../../..");
 const PORT = Number(process.env.PORT ?? 3000);
 
 const app = createApp({
+  repoRoot,
   catalogDirs: [path.join(repoRoot, "catalog", "examples"), path.join(repoRoot, "generated")],
   templateDir: path.join(repoRoot, "templates", "golden-path-service"),
   generatedDir: path.join(repoRoot, "generated"),

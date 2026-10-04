@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Catalog } from "@idp/core";
 import { Router } from "express";
 import type { AppOptions } from "../options";
@@ -20,7 +21,9 @@ export function createCatalogRouter(options: AppOptions): Router {
       return;
     }
     const dependents = catalog.getDependents(entry.metadata.name);
-    res.send(renderServiceDetail(entry, dependents, catalog.sourceFileFor(entry.metadata.name)));
+    const absoluteSource = catalog.sourceFileFor(entry.metadata.name);
+    const source = absoluteSource ? path.relative(options.repoRoot, absoluteSource) : undefined;
+    res.send(renderServiceDetail(entry, dependents, source));
   });
 
   return router;

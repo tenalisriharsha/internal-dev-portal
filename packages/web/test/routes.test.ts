@@ -57,6 +57,7 @@ spec:
   await fs.writeFile(path.join(templateDir, "README.md.tmpl"), "# {{name}}\n", "utf8");
 
   const options: AppOptions = {
+    repoRoot: os.tmpdir(),
     catalogDirs: [catalogDir, generatedDir],
     templateDir,
     generatedDir,

@@ -80,7 +80,8 @@ export function createCreateRouter(options: AppOptions): Router {
         lifecycle: submitted.lifecycle,
         dependsOnYaml: `[${submitted.dependsOn.join(", ")}]`,
       });
-      res.send(renderCreateSuccess(submitted.name, files));
+      const relativeFiles = files.map((file) => path.relative(options.repoRoot, file));
+      res.send(renderCreateSuccess(submitted.name, relativeFiles));
     } catch (err) {
       res
         .status(500)
