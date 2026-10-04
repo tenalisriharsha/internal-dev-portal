@@ -1,0 +1,10 @@
+apiVersion: idp.dev/v1
+kind: Service
+metadata:
+  name: legacy-cart-service
+  description: Previous-generation shopping cart, replaced by checkout-web.
+  tags: [checkout, legacy]
+spec:
+  lifecycle: deprecated
+  owner: team-checkout
+  dependsOn: [user-service]

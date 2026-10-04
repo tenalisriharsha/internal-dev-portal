@@ -1,0 +1,10 @@
+apiVersion: idp.dev/v1
+kind: Service
+metadata:
+  name: notifications-service
+  description: Sends transactional email, SMS, and push notifications.
+  tags: [notifications, platform]
+spec:
+  lifecycle: experimental
+  owner: team-platform
+  dependsOn: [user-service]

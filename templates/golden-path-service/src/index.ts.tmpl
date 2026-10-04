@@ -1,0 +1,9 @@
+// {{description}}
+
+export function handler(): string {
+  return "{{name}} is alive";
+}
+
+if (require.main === module) {
+  console.log(handler());
+}

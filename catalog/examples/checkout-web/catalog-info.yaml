@@ -1,0 +1,14 @@
+apiVersion: idp.dev/v1
+kind: Service
+metadata:
+  name: checkout-web
+  description: Customer-facing checkout flow and cart experience.
+  tags: [checkout, frontend]
+spec:
+  lifecycle: staging
+  owner: team-checkout
+  dependsOn: [user-service, payments-service, inventory-service]
+  oncall:
+    provider: opsgenie
+    rotation: checkout-primary
+    slack: "#checkout-oncall"

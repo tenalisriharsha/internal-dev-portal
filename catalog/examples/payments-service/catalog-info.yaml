@@ -1,0 +1,14 @@
+apiVersion: idp.dev/v1
+kind: Service
+metadata:
+  name: payments-service
+  description: Processes payment authorization, capture, and refunds.
+  tags: [payments, core]
+spec:
+  lifecycle: production
+  owner: team-payments
+  dependsOn: [user-service]
+  oncall:
+    provider: pagerduty
+    rotation: payments-primary
+    slack: "#payments-oncall"

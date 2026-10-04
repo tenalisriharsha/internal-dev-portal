@@ -1,0 +1,14 @@
+apiVersion: idp.dev/v1
+kind: Service
+metadata:
+  name: user-service
+  description: Owns user identity, authentication, and profile data.
+  tags: [identity, core]
+spec:
+  lifecycle: production
+  owner: team-identity
+  dependsOn: []
+  oncall:
+    provider: pagerduty
+    rotation: identity-primary
+    slack: "#identity-oncall"
