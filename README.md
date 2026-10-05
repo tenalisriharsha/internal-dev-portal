@@ -40,24 +40,37 @@ catalog immediately.
 
 ![Service created successfully](docs/screenshots/06-create-success.png)
 
-**Catalog after self-service creation** — the new service is live, no restart,
-no manual registration step.
+**Catalog after self-service creation** — the new service is live immediately:
+the create flow triggers an explicit catalog refresh, no restart, no manual
+registration step.
 
 ![Catalog showing the newly created service](docs/screenshots/07-catalog-list-updated.png)
+
+**Catalog validation errors** — a malformed `catalog-info.yaml` is skipped,
+not allowed to crash the catalog, and surfaced in a banner instead of silently
+disappearing.
+
+![Catalog list showing a validation error banner](docs/screenshots/08-catalog-validation-errors.png)
 
 ## Architecture
 
 An npm-workspaces monorepo with two TypeScript packages:
 
 - **`@idp/core`** — the domain layer: a Zod schema for `catalog-info.yaml`, a
-  catalog loader that scans directories and validates every file, a
-  dependency-graph builder with cycle detection, and a template engine that
-  renders the golden-path scaffold.
+  `CatalogSource` abstraction (local directories and a GitHub-repos source,
+  both implementing the same interface) feeding a validating catalog loader,
+  a SQLite-backed `CatalogStore` that persists the last-loaded snapshot, a
+  scheduler that refreshes the store on an interval, a dependency-graph
+  builder with cycle detection, and a template engine that renders the
+  golden-path scaffold.
 - **`@idp/web`** — a server-rendered Express app (catalog list, service
-  detail, dependency graph, create flow) built on top of `@idp/core`.
+  detail, dependency graph, create flow, and an `/admin/refresh` trigger)
+  built on top of `@idp/core`. Every page read is a SQLite read, not a
+  re-fetch — the catalog only changes on an explicit refresh (scheduled,
+  button-triggered, or after the create flow scaffolds a new service).
 
-Full details, including the request/data flow and why the catalog reloads
-from disk on every request, are in [PROGRESS.md](PROGRESS.md).
+Full details, including the source/store abstraction boundary, are in
+[PROGRESS.md](PROGRESS.md).
 
 ## Getting started
 
@@ -67,7 +80,19 @@ npx tsc --build packages/core   # @idp/web imports the compiled @idp/core
 npm run dev --workspace=@idp/web
 ```
 
-Then open `http://localhost:3000`.
+Then open `http://localhost:3000`. On startup the server does an initial
+catalog refresh and then re-refreshes every 5 minutes by default; both
+local-directory and (if configured) GitHub sources are read, validated, and
+persisted to a `catalog.db` SQLite file at the repo root.
+
+Optional environment variables:
+
+```sh
+PORT=3000                              # server port
+CATALOG_REFRESH_INTERVAL_MS=300000     # scheduled refresh interval; 0 disables it
+CATALOG_GITHUB_REPOS=acme/widgets,acme/sprockets@main   # owner/repo[@ref], comma-separated
+GITHUB_TOKEN=ghp_...                   # only needed for private repos / higher rate limits
+```
 
 ## Running tests
 
@@ -75,17 +100,20 @@ Then open `http://localhost:3000`.
 npm test
 ```
 
-Runs the full suite for both packages: catalog/schema/graph/template unit
-tests in `@idp/core`, and route-level integration tests (including the full
-create-service flow) in `@idp/web`.
+Runs the full suite for both packages: catalog/schema/source/store/scheduler/
+graph/template unit tests in `@idp/core`, and route-level integration tests
+(including the full create-service flow and the explicit refresh route) in
+`@idp/web`. The GitHub source is tested with an injected fetch function, so
+the suite never makes a real network call.
 
 ## Repository layout
 
 ```
-packages/core/            catalog schema, loader, dependency graph, template engine
-packages/web/             Express app: catalog UI, service detail, graph, create flow
+packages/core/            catalog schema, sources, SQLite store, scheduler, dependency graph, template engine
+packages/web/             Express app: catalog UI, service detail, graph, create flow, admin refresh
 catalog/examples/         example catalog-info.yaml fixtures (stand-ins for "other repos")
 templates/golden-path-service/  the scaffold the self-service flow renders
 generated/                where self-service "create new service" writes new services
 docs/screenshots/         screenshots used in this README
+catalog.db                 (gitignored) persisted catalog snapshot, created on first run
 ```
