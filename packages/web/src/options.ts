@@ -1,10 +1,14 @@
+import type { CatalogSource, CatalogStore } from "@idp/core";
+
 export interface AppOptions {
   /** Repo root, used only to display source file paths relative instead of absolute. */
   repoRoot: string;
-  /** Root directories scanned for `<service>/catalog-info.yaml` files, merged into one catalog. */
-  catalogDirs: string[];
+  /** Persisted catalog snapshot. Pages read from this; nothing re-fetches sources on render. */
+  store: CatalogStore;
+  /** Where the catalog is fetched from on refresh: local directories, GitHub repos, etc. */
+  sources: CatalogSource[];
   /** Golden-path template directory rendered by the self-service create flow. */
   templateDir: string;
-  /** Directory the create flow writes newly scaffolded services into. Must be one of catalogDirs. */
+  /** Directory the create flow writes newly scaffolded services into. Must be covered by `sources`. */
   generatedDir: string;
 }

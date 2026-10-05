@@ -1,7 +1,8 @@
 import path from "node:path";
-import { Catalog, CatalogEntrySchema, renderTemplate } from "@idp/core";
+import { CatalogEntrySchema, renderTemplate } from "@idp/core";
 import { Router } from "express";
 import type { AppOptions } from "../options";
+import { readCatalog } from "../catalogView";
 import { renderCreateForm, type CreateFormValues } from "../views/createForm";
 import { renderCreateSuccess } from "../views/createSuccess";
 
@@ -14,8 +15,8 @@ function normalizeDependsOn(raw: unknown): string[] {
 export function createCreateRouter(options: AppOptions): Router {
   const router = Router();
 
-  router.get("/create", async (_req, res) => {
-    const catalog = await Catalog.loadFromDirectories(options.catalogDirs);
+  router.get("/create", (_req, res) => {
+    const catalog = readCatalog(options);
     res.send(
       renderCreateForm(catalog.list(), {
         name: "",
@@ -28,7 +29,7 @@ export function createCreateRouter(options: AppOptions): Router {
   });
 
   router.post("/create", async (req, res) => {
-    const catalog = await Catalog.loadFromDirectories(options.catalogDirs);
+    const catalog = readCatalog(options);
 
     const submitted: CreateFormValues = {
       name: typeof req.body.name === "string" ? req.body.name.trim() : "",
@@ -80,6 +81,7 @@ export function createCreateRouter(options: AppOptions): Router {
         lifecycle: submitted.lifecycle,
         dependsOnYaml: `[${submitted.dependsOn.join(", ")}]`,
       });
+      await options.store.refresh(options.sources);
       const relativeFiles = files.map((file) => path.relative(options.repoRoot, file));
       res.send(renderCreateSuccess(submitted.name, relativeFiles));
     } catch (err) {

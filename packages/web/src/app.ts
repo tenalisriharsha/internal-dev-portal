@@ -1,6 +1,7 @@
 import path from "node:path";
 import express, { type Express } from "express";
 import type { AppOptions } from "./options";
+import { createAdminRouter } from "./routes/admin";
 import { createCatalogRouter } from "./routes/catalog";
 import { createCreateRouter } from "./routes/create";
 import { createGraphRouter } from "./routes/graph";
@@ -14,6 +15,7 @@ export function createApp(options: AppOptions): Express {
   app.use(createCatalogRouter(options));
   app.use(createGraphRouter(options));
   app.use(createCreateRouter(options));
+  app.use(createAdminRouter(options));
 
   app.use((_req, res) => {
     res.status(404).send(layout("Not Found", "<div class=\"page-header\"><h1>404</h1><p class=\"page-subtitle\">Page not found.</p></div>"));

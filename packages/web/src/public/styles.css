@@ -86,6 +86,28 @@ code {
   font-size: 0.9em;
 }
 
+.catalog-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -6px 0 20px;
+}
+
+.catalog-meta form {
+  margin: 0;
+}
+
+.catalog-meta__refreshed {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.btn-small {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
 /* Service catalog grid */
 .service-grid {
   display: grid;

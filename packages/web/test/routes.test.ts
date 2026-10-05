@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { CatalogStore, LocalDirectorySource, type CatalogSource } from "@idp/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
@@ -10,6 +11,8 @@ import type { AppOptions } from "../src/options";
 let catalogDir: string;
 let generatedDir: string;
 let templateDir: string;
+let store: CatalogStore;
+let sources: CatalogSource[];
 let app: Express;
 
 async function writeExampleService(name: string, dependsOn: string[] = []): Promise<void> {
@@ -35,6 +38,11 @@ spec:
   );
 }
 
+/** Refreshes the store the same way the scheduler/admin route would, outside of an HTTP request. */
+async function refresh(): Promise<void> {
+  await store.refresh(sources);
+}
+
 beforeEach(async () => {
   catalogDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-catalog-"));
   generatedDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-generated-"));
@@ -56,9 +64,13 @@ spec:
   );
   await fs.writeFile(path.join(templateDir, "README.md.tmpl"), "# {{name}}\n", "utf8");
 
+  store = new CatalogStore(":memory:");
+  sources = [new LocalDirectorySource(catalogDir), new LocalDirectorySource(generatedDir)];
+
   const options: AppOptions = {
     repoRoot: os.tmpdir(),
-    catalogDirs: [catalogDir, generatedDir],
+    store,
+    sources,
     templateDir,
     generatedDir,
   };
@@ -66,6 +78,7 @@ spec:
 });
 
 afterEach(async () => {
+  store.close();
   await fs.rm(catalogDir, { recursive: true, force: true });
   await fs.rm(generatedDir, { recursive: true, force: true });
   await fs.rm(templateDir, { recursive: true, force: true });
@@ -74,6 +87,7 @@ afterEach(async () => {
 describe("GET /", () => {
   it("lists registered services", async () => {
     await writeExampleService("user-service");
+    await refresh();
 
     const res = await request(app).get("/");
 
@@ -87,12 +101,43 @@ describe("GET /", () => {
     expect(res.status).toBe(200);
     expect(res.text).toContain("No services registered yet");
   });
+
+  it("shows 'Not yet refreshed' before any refresh has run", async () => {
+    const res = await request(app).get("/");
+    expect(res.text).toContain("Not yet refreshed");
+  });
+
+  it("does not pick up filesystem changes until an explicit refresh runs", async () => {
+    const before = await request(app).get("/");
+    expect(before.text).not.toContain("late-service");
+
+    await writeExampleService("late-service");
+    const stillBefore = await request(app).get("/");
+    expect(stillBefore.text).not.toContain("late-service");
+
+    await refresh();
+    const after = await request(app).get("/");
+    expect(after.text).toContain("late-service");
+  });
+
+  it("surfaces catalog validation errors in a banner", async () => {
+    const dir = path.join(catalogDir, "broken-service");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "catalog-info.yaml"), "not: [valid: yaml::", "utf8");
+    await refresh();
+
+    const res = await request(app).get("/");
+    expect(res.text).toContain("catalog file");
+    expect(res.text).toContain("failed validation");
+    expect(res.text).toMatch(/invalid YAML/);
+  });
 });
 
 describe("GET /services/:name", () => {
   it("renders ownership, on-call, and dependency info", async () => {
     await writeExampleService("user-service");
     await writeExampleService("checkout-web", ["user-service"]);
+    await refresh();
 
     const res = await request(app).get("/services/checkout-web");
 
@@ -106,6 +151,7 @@ describe("GET /services/:name", () => {
   it("lists reverse dependents on the depended-upon service", async () => {
     await writeExampleService("user-service");
     await writeExampleService("checkout-web", ["user-service"]);
+    await refresh();
 
     const res = await request(app).get("/services/user-service");
 
@@ -125,6 +171,7 @@ describe("GET /graph", () => {
   it("renders an svg with a node per service", async () => {
     await writeExampleService("user-service");
     await writeExampleService("checkout-web", ["user-service"]);
+    await refresh();
 
     const res = await request(app).get("/graph");
 
@@ -132,6 +179,34 @@ describe("GET /graph", () => {
     expect(res.text).toContain("<svg");
     expect(res.text).toContain(">user-service<");
     expect(res.text).toContain(">checkout-web<");
+  });
+});
+
+describe("POST /admin/refresh", () => {
+  it("picks up filesystem changes and redirects back to the catalog", async () => {
+    await writeExampleService("fresh-service");
+
+    const res = await request(app).post("/admin/refresh");
+    expect(res.status).toBe(303);
+    expect(res.headers.location).toBe("/");
+
+    const after = await request(app).get("/");
+    expect(after.text).toContain("fresh-service");
+    expect(after.text).not.toContain("Not yet refreshed");
+  });
+
+  it("only redirects to a local path, never an external one", async () => {
+    const res = await request(app)
+      .post("/admin/refresh")
+      .query({ redirectTo: "//evil.example.com" });
+    expect(res.status).toBe(303);
+    expect(res.headers.location).toBe("/");
+  });
+
+  it("redirects to an allowed local path when given one", async () => {
+    await writeExampleService("graphed-service");
+    const res = await request(app).post("/admin/refresh").query({ redirectTo: "/graph" });
+    expect(res.headers.location).toBe("/graph");
   });
 });
 
@@ -145,8 +220,9 @@ describe("GET /create", () => {
 });
 
 describe("POST /create", () => {
-  it("scaffolds a new service and registers it in the catalog", async () => {
+  it("scaffolds a new service and registers it in the catalog immediately", async () => {
     await writeExampleService("user-service");
+    await refresh();
 
     const createRes = await request(app).post("/create").type("form").send({
       name: "billing-service",
@@ -176,6 +252,7 @@ describe("POST /create", () => {
 
   it("rejects a name that collides with an existing service", async () => {
     await writeExampleService("user-service");
+    await refresh();
 
     const res = await request(app).post("/create").type("form").send({
       name: "user-service",
