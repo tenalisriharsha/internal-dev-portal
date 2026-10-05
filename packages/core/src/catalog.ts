@@ -1,41 +1,17 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import yaml from "js-yaml";
 import { CatalogEntry, CatalogEntrySchema } from "./schema";
-
-export const CATALOG_FILE_NAME = "catalog-info.yaml";
+import { CatalogSource, LocalDirectorySource } from "./source";
 
 export interface ValidationIssue {
   file: string;
   message: string;
 }
 
-/**
- * Finds every catalog-info.yaml file nested up to one level deep inside
- * each given root directory (root/<service>/catalog-info.yaml).
- */
-async function findCatalogFiles(rootDir: string): Promise<string[]> {
-  let subdirs: string[];
-  try {
-    subdirs = (await fs.readdir(rootDir, { withFileTypes: true }))
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(rootDir, entry.name));
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
-
-  const found: string[] = [];
-  for (const dir of subdirs) {
-    const candidate = path.join(dir, CATALOG_FILE_NAME);
-    try {
-      await fs.access(candidate);
-      found.push(candidate);
-    } catch {
-      // no catalog-info.yaml in this directory, skip it
-    }
-  }
-  return found;
+export interface CatalogSnapshot {
+  entries: CatalogEntry[];
+  errors: ValidationIssue[];
+  /** Maps service name -> the source id (file path or github:owner/repo) it was loaded from. */
+  sourceFiles: Record<string, string>;
 }
 
 export class Catalog {
@@ -43,31 +19,41 @@ export class Catalog {
   private readonly sourceFiles = new Map<string, string>();
   readonly errors: ValidationIssue[] = [];
 
-  static async loadFromDirectories(rootDirs: string[]): Promise<Catalog> {
+  /** Loads and validates catalog-info.yaml files from every given source, merging into one catalog. */
+  static async load(sources: CatalogSource[]): Promise<Catalog> {
     const catalog = new Catalog();
-    for (const rootDir of rootDirs) {
-      const files = await findCatalogFiles(rootDir);
+    for (const source of sources) {
+      const { files, errors } = await source.load();
+      catalog.errors.push(...errors);
       for (const file of files) {
-        await catalog.loadFile(file);
+        catalog.loadRaw(file.id, file.contents);
       }
     }
     return catalog;
   }
 
-  private async loadFile(file: string): Promise<void> {
-    let raw: string;
-    try {
-      raw = await fs.readFile(file, "utf8");
-    } catch (err) {
-      this.errors.push({ file, message: `could not read file: ${String(err)}` });
-      return;
-    }
+  /** Convenience wrapper over `load` for local directory trees (fixtures, tests, generated/). */
+  static async loadFromDirectories(rootDirs: string[]): Promise<Catalog> {
+    return Catalog.load(rootDirs.map((dir) => new LocalDirectorySource(dir)));
+  }
 
+  /** Rehydrates a catalog from an already-validated snapshot (e.g. read from a CatalogStore). */
+  static fromSnapshot(snapshot: CatalogSnapshot): Catalog {
+    const catalog = new Catalog();
+    for (const entry of snapshot.entries) {
+      catalog.entries.set(entry.metadata.name, entry);
+      catalog.sourceFiles.set(entry.metadata.name, snapshot.sourceFiles[entry.metadata.name] ?? "");
+    }
+    catalog.errors.push(...snapshot.errors);
+    return catalog;
+  }
+
+  private loadRaw(id: string, raw: string): void {
     let parsed: unknown;
     try {
       parsed = yaml.load(raw);
     } catch (err) {
-      this.errors.push({ file, message: `invalid YAML: ${String(err)}` });
+      this.errors.push({ file: id, message: `invalid YAML: ${String(err)}` });
       return;
     }
 
@@ -76,21 +62,21 @@ export class Catalog {
       const message = result.error.issues
         .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
         .join("; ");
-      this.errors.push({ file, message });
+      this.errors.push({ file: id, message });
       return;
     }
 
     const name = result.data.metadata.name;
     if (this.entries.has(name)) {
       this.errors.push({
-        file,
+        file: id,
         message: `duplicate service name "${name}" (already defined in ${this.sourceFiles.get(name)})`,
       });
       return;
     }
 
     this.entries.set(name, result.data);
-    this.sourceFiles.set(name, file);
+    this.sourceFiles.set(name, id);
   }
 
   list(): CatalogEntry[] {
@@ -114,6 +100,14 @@ export class Catalog {
   /** Services that declare a dependency on the given service name. */
   getDependents(name: string): CatalogEntry[] {
     return this.list().filter((entry) => entry.spec.dependsOn.includes(name));
+  }
+
+  toSnapshot(): CatalogSnapshot {
+    return {
+      entries: this.list(),
+      errors: [...this.errors],
+      sourceFiles: Object.fromEntries(this.sourceFiles),
+    };
   }
 
   get size(): number {
