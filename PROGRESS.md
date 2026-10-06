@@ -37,7 +37,8 @@ internal-dev-portal/
 **`@idp/core`** is the domain layer, framework-free and fully unit-tested:
 
 - `schema.ts` — a Zod schema for `catalog-info.yaml` (metadata, ownership,
-  lifecycle, on-call, dependencies).
+  lifecycle, on-call, dependencies, and an optional `health` block —
+  `lastDeployAt` plus `openIncidents`, defaulting `openIncidents` to 0).
 - `source.ts` — the `CatalogSource` abstraction: `LocalDirectorySource` scans
   a root directory for `<service>/catalog-info.yaml`; `GitHubRepoSource`
   fetches the same file from a configured list of GitHub repos via the
@@ -72,8 +73,19 @@ no build step beyond `ts-node`) with four pages plus one action route:
 - `/` — the service catalog, cards with lifecycle/kind badges and ownership,
   a "last refreshed" timestamp, a manual "Refresh now" button, and a banner
   listing any catalog-info.yaml files that failed validation.
-- `/services/:name` — ownership, on-call rotation, and both directions of the
-  dependency relationship (what it depends on, what depends on it).
+- `/services/:name` — ownership, on-call rotation, a health panel
+  (open-incident badge plus last-deploy time, or an empty state when the
+  entry has no `health` block), and both directions of the dependency
+  relationship (what it depends on, what depends on it).
+- `/teams` — every distinct `spec.owner` value in the catalog as a team card:
+  service count, a health badge summing that team's open incidents, and how
+  many distinct on-call rotations back it. There's no separate "team"
+  concept in the schema — a team is just whatever string services declare as
+  their owner, grouped at render time.
+- `/teams/:owner` — every service that team owns, its combined on-call
+  rotations (deduped by provider+rotation), and a health rollup (total open
+  incidents, most recent deploy across the team's services). 404s when no
+  service declares that owner.
 - `/graph` — the full dependency graph as a hand-laid-out SVG, nodes colored
   by lifecycle status.
 - `/create` — a form that scaffolds a brand-new service from
@@ -83,6 +95,15 @@ no build step beyond `ts-node`) with four pages plus one action route:
   (defaults to `/`, accepts a same-origin-only `redirectTo`). This is the
   button's target today; a repo webhook could POST to the same URL once
   Phase 5 adds auth in front of it.
+
+On-call rotation names (wherever they're rendered — service detail or a
+team page) go through `oncallLinks.escalationUrl`, which builds a deep link
+into the provider's schedule search *only* when the matching env var is
+set (`PAGERDUTY_SUBDOMAIN` or `OPSGENIE_ORG`); otherwise the rotation
+renders as plain text, same as before this existed. This is a URL-pattern
+deep link, not a live API call — there's no real PagerDuty/Opsgenie account
+behind this demo to verify against, so it intentionally stops at "jump to
+a search for this rotation name" rather than resolving a specific schedule.
 
 Every page read is now `store.snapshot()` — a SQLite read — rehydrated into a
 `Catalog` via `Catalog.fromSnapshot`. The catalog only changes when something
@@ -131,11 +152,31 @@ drawing the `CatalogSource`/`Catalog` boundary where Phase 1 did.
         now part of the catalog list chrome) and 1 new screenshot added for
         the validation-error banner — 8 screenshots total, all verified
 
-- [ ] **Phase 3 — Ownership & on-call depth**
-  - [ ] Team pages (all services owned by a team, aggregated on-call)
-  - [ ] On-call escalation links that resolve to a real PagerDuty/Opsgenie
-        schedule rather than free-text rotation names
-  - [ ] Service health/status signal (e.g. last-deploy time, open incident count)
+- [x] **Phase 3 — Ownership & on-call depth** *(tonight)*
+  - [x] `/teams` and `/teams/:owner` pages grouping `catalog.list()` by
+        `spec.owner` at render time — no new "team" entity in the schema,
+        matching the plan to defer that abstraction until it's needed
+  - [x] Team pages aggregate on-call rotations (deduped by
+        provider+rotation) and roll up open incidents / most recent deploy
+        across every service the team owns
+  - [x] On-call escalation links: an optional `EscalationConfig`
+        (`PAGERDUTY_SUBDOMAIN` / `OPSGENIE_ORG` env vars) turns a rotation
+        name into a deep link to that provider's schedule search; without
+        config it stays plain text, so this is additive, not a breaking
+        change to existing on-call rendering
+  - [x] `spec.health` schema addition (`lastDeployAt`, `openIncidents`,
+        both optional/defaulted) — a health panel on `/services/:name`
+        shows a color-coded open-incident badge and last-deploy time, or an
+        empty state when a service reports no health data at all
+        (`notifications-service` in the fixtures intentionally has none, to
+        exercise that path)
+  - [x] 19 new tests (health schema validation, `escalationUrl` unit tests,
+        team routes, service-detail health panel, escalation link
+        rendering with and without config) — 78 tests total, all passing;
+        both packages type-check clean
+  - [x] 3 new screenshots (teams list, team detail, service detail with
+        health panel + linked rotation) — 11 screenshots total, all
+        verified
 
 - [ ] **Phase 4 — Golden paths, plural**
   - [ ] More than one template (`golden-path-service`, `golden-path-website`,
@@ -153,16 +194,22 @@ drawing the `CatalogSource`/`Catalog` boundary where Phase 1 did.
 
 ## Where to resume (next session)
 
-Start **Phase 3 — Ownership & on-call depth**. The concrete first step: team
-pages. `CatalogEntry.spec.owner` is already a plain string on every entry, so
-a `/teams/:owner` route can be built the same way `/services/:name` was —
-filter `catalog.list()` by owner, no new core abstraction needed yet. The
-`oncall` block (provider/rotation/slack) is already modeled in the schema but
-only rendered per-service; aggregating it per-team on that new page is the
-natural next increment. Escalation links that resolve to a real
-PagerDuty/Opsgenie schedule (rather than the free-text `rotation` string) are
-a reasonable stretch goal for the same phase but need a decision on which
-provider's API to integrate first — defer until team pages exist and it's
-clear what data a real schedule lookup needs to key on.
+Start **Phase 4 — Golden paths, plural**. The concrete first step: a second
+template directory (e.g. `templates/golden-path-website` or
+`templates/golden-path-library`, matching the `kind` enum already in the
+schema) alongside the existing `templates/golden-path-service`. The create
+flow currently hard-codes `options.templateDir` to a single directory
+(`packages/web/src/options.ts` / `routes/create.ts`); the natural shape is
+`templateDir` becoming a map keyed by `kind` (or a list the create form can
+select from), with `template.ts`'s render function staying exactly as-is —
+it already just renders one directory of `*.tmpl` files into one output
+directory, so adding a second template is adding a second directory, not
+changing the engine. Once two templates exist, revisit whether substitution
+needs anything beyond `{{variable}}` (conditionals/loops) — don't build that
+speculatively before a real template needs it. Scaffolding straight into a
+new GitHub repo via the GitHub API is a reasonable stretch goal for the same
+phase, but it's a bigger jump (needs a GitHub token with repo-create scope,
+real network calls in a place that's been injectable-fetch-only so far) —
+sequence it after the plural-template work, not before.
 
 STATUS: IN_PROGRESS

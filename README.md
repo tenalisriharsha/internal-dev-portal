@@ -52,22 +52,48 @@ disappearing.
 
 ![Catalog list showing a validation error banner](docs/screenshots/08-catalog-validation-errors.png)
 
+**Teams** — every owner that appears in `spec.owner` across the catalog,
+aggregated into a team card: service count, total open incidents, and how
+many distinct on-call rotations back it.
+
+![Teams list showing five teams with aggregated incident and rotation counts](docs/screenshots/09-teams-list.png)
+
+**Team detail** — every service a team owns in one place, its combined
+on-call rotations (linked out to the provider when configured), and a
+health rollup across the whole team.
+
+![Team detail page for team-checkout showing two services and aggregated health](docs/screenshots/10-team-detail.png)
+
+**Service health & on-call escalation** — a `spec.health` block
+(`lastDeployAt`, `openIncidents`) renders as a color-coded panel, and when
+`PAGERDUTY_SUBDOMAIN`/`OPSGENIE_ORG` is configured, the rotation name becomes
+a deep link into that provider's schedule search.
+
+![Service detail page showing a health panel and a linked on-call rotation](docs/screenshots/11-service-detail-health.png)
+
 ## Architecture
 
 An npm-workspaces monorepo with two TypeScript packages:
 
-- **`@idp/core`** — the domain layer: a Zod schema for `catalog-info.yaml`, a
-  `CatalogSource` abstraction (local directories and a GitHub-repos source,
-  both implementing the same interface) feeding a validating catalog loader,
-  a SQLite-backed `CatalogStore` that persists the last-loaded snapshot, a
-  scheduler that refreshes the store on an interval, a dependency-graph
-  builder with cycle detection, and a template engine that renders the
-  golden-path scaffold.
+- **`@idp/core`** — the domain layer: a Zod schema for `catalog-info.yaml`
+  (metadata, ownership, lifecycle, on-call, and an optional `health` block —
+  `lastDeployAt` and `openIncidents`), a `CatalogSource` abstraction (local
+  directories and a GitHub-repos source, both implementing the same
+  interface) feeding a validating catalog loader, a SQLite-backed
+  `CatalogStore` that persists the last-loaded snapshot, a scheduler that
+  refreshes the store on an interval, a dependency-graph builder with cycle
+  detection, and a template engine that renders the golden-path scaffold.
 - **`@idp/web`** — a server-rendered Express app (catalog list, service
-  detail, dependency graph, create flow, and an `/admin/refresh` trigger)
-  built on top of `@idp/core`. Every page read is a SQLite read, not a
-  re-fetch — the catalog only changes on an explicit refresh (scheduled,
-  button-triggered, or after the create flow scaffolds a new service).
+  detail, team pages, dependency graph, create flow, and an `/admin/refresh`
+  trigger) built on top of `@idp/core`. Every page read is a SQLite read, not
+  a re-fetch — the catalog only changes on an explicit refresh (scheduled,
+  button-triggered, or after the create flow scaffolds a new service). Team
+  pages (`/teams`, `/teams/:owner`) group services by `spec.owner` with no
+  separate "team" entity — a team is just whatever string appears as an
+  owner — and roll up each team's open incidents and on-call rotations.
+  When `PAGERDUTY_SUBDOMAIN` or `OPSGENIE_ORG` is set, on-call rotation
+  names render as links into that provider's schedule search instead of
+  plain text.
 
 Full details, including the source/store abstraction boundary, are in
 [PROGRESS.md](PROGRESS.md).
@@ -92,6 +118,8 @@ PORT=3000                              # server port
 CATALOG_REFRESH_INTERVAL_MS=300000     # scheduled refresh interval; 0 disables it
 CATALOG_GITHUB_REPOS=acme/widgets,acme/sprockets@main   # owner/repo[@ref], comma-separated
 GITHUB_TOKEN=ghp_...                   # only needed for private repos / higher rate limits
+PAGERDUTY_SUBDOMAIN=acme               # turns pagerduty rotations into schedule-search links
+OPSGENIE_ORG=acme                      # turns opsgenie rotations into schedule-search links
 ```
 
 ## Running tests
@@ -102,9 +130,10 @@ npm test
 
 Runs the full suite for both packages: catalog/schema/source/store/scheduler/
 graph/template unit tests in `@idp/core`, and route-level integration tests
-(including the full create-service flow and the explicit refresh route) in
-`@idp/web`. The GitHub source is tested with an injected fetch function, so
-the suite never makes a real network call.
+(including the full create-service flow, the explicit refresh route, team
+pages, and on-call escalation links) in `@idp/web`. The GitHub source is
+tested with an injected fetch function, so the suite never makes a real
+network call.
 
 ## Repository layout
 
