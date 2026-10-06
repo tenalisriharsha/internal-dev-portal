@@ -233,6 +233,10 @@ code {
   font-size: 16px;
 }
 
+.panel--stacked {
+  margin-top: 16px;
+}
+
 .kv-list {
   display: grid;
   grid-template-columns: max-content 1fr;

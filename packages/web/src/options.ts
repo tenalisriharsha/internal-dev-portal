@@ -1,4 +1,5 @@
 import type { CatalogSource, CatalogStore } from "@idp/core";
+import type { EscalationConfig } from "./oncallLinks";
 
 export interface AppOptions {
   /** Repo root, used only to display source file paths relative instead of absolute. */
@@ -11,4 +12,6 @@ export interface AppOptions {
   templateDir: string;
   /** Directory the create flow writes newly scaffolded services into. Must be covered by `sources`. */
   generatedDir: string;
+  /** Optional deep-link config for turning on-call rotation names into provider schedule links. */
+  escalation?: EscalationConfig;
 }

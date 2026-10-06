@@ -1,5 +1,6 @@
 const NAV_LINKS: Array<{ href: string; label: string }> = [
   { href: "/", label: "Catalog" },
+  { href: "/teams", label: "Teams" },
   { href: "/graph", label: "Dependency Graph" },
   { href: "/create", label: "Create New Service" },
 ];

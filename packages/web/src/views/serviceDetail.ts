@@ -1,7 +1,9 @@
 import type { CatalogEntry } from "@idp/core";
-import { lifecycleBadge, kindBadge } from "./badges";
+import type { EscalationConfig } from "../oncallLinks";
+import { healthBadge, lifecycleBadge, kindBadge } from "./badges";
 import { escapeHtml } from "./escape";
 import { layout } from "./layout";
+import { renderRotation } from "./oncall";
 
 function serviceLink(name: string): string {
   return `<a class="pill-link" href="/services/${encodeURIComponent(name)}">${escapeHtml(name)}</a>`;
@@ -11,8 +13,10 @@ export function renderServiceDetail(
   entry: CatalogEntry,
   dependents: CatalogEntry[],
   sourceFile: string | undefined,
+  escalation: EscalationConfig = {},
 ): string {
   const oncall = entry.spec.oncall;
+  const health = entry.spec.health;
 
   const body = `
     <div class="page-header">
@@ -43,10 +47,24 @@ export function renderServiceDetail(
             ? `<dl class="kv-list">
                 <dt>Provider</dt>
                 <dd>${escapeHtml(oncall.provider)}</dd>
-                ${oncall.rotation ? `<dt>Rotation</dt><dd>${escapeHtml(oncall.rotation)}</dd>` : ""}
+                ${oncall.rotation ? `<dt>Rotation</dt><dd>${renderRotation(oncall, escalation)}</dd>` : ""}
                 ${oncall.slack ? `<dt>Slack</dt><dd>${escapeHtml(oncall.slack)}</dd>` : ""}
               </dl>`
             : '<p class="empty-state">No on-call rotation configured.</p>'
+        }
+      </section>
+
+      <section class="panel">
+        <h2>Health</h2>
+        ${
+          health
+            ? `<dl class="kv-list">
+                <dt>Open incidents</dt>
+                <dd>${healthBadge(health.openIncidents)}</dd>
+                <dt>Last deploy</dt>
+                <dd>${health.lastDeployAt ? escapeHtml(new Date(health.lastDeployAt).toLocaleString()) : "No deploys recorded"}</dd>
+              </dl>`
+            : '<p class="empty-state">No health signal reported.</p>'
         }
       </section>
 

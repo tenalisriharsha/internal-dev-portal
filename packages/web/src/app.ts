@@ -5,6 +5,7 @@ import { createAdminRouter } from "./routes/admin";
 import { createCatalogRouter } from "./routes/catalog";
 import { createCreateRouter } from "./routes/create";
 import { createGraphRouter } from "./routes/graph";
+import { createTeamsRouter } from "./routes/teams";
 import { layout } from "./views/layout";
 
 export function createApp(options: AppOptions): Express {
@@ -13,6 +14,7 @@ export function createApp(options: AppOptions): Express {
   app.use("/public", express.static(path.join(__dirname, "public")));
 
   app.use(createCatalogRouter(options));
+  app.use(createTeamsRouter(options));
   app.use(createGraphRouter(options));
   app.use(createCreateRouter(options));
   app.use(createAdminRouter(options));

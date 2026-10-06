@@ -1,34 +1,14 @@
 import type { CatalogEntry, ValidationIssue } from "@idp/core";
-import { lifecycleBadge, kindBadge } from "./badges";
 import { escapeHtml } from "./escape";
 import { layout } from "./layout";
+import { renderServiceCard } from "./serviceCard";
 
 export function renderCatalogList(
   entries: CatalogEntry[],
   errors: ValidationIssue[] = [],
   refreshedAt: string | null = null,
 ): string {
-  const rows = entries
-    .map(
-      (entry) => `
-      <a class="service-card" href="/services/${encodeURIComponent(entry.metadata.name)}">
-        <div class="service-card__header">
-          <h3>${escapeHtml(entry.metadata.name)}</h3>
-          ${kindBadge(entry.kind)}
-        </div>
-        <p class="service-card__description">${escapeHtml(entry.metadata.description)}</p>
-        <div class="service-card__meta">
-          ${lifecycleBadge(entry.spec.lifecycle)}
-          <span class="service-card__owner">owner: ${escapeHtml(entry.spec.owner)}</span>
-          ${
-            entry.spec.dependsOn.length > 0
-              ? `<span class="service-card__deps">${entry.spec.dependsOn.length} dependenc${entry.spec.dependsOn.length === 1 ? "y" : "ies"}</span>`
-              : ""
-          }
-        </div>
-      </a>`,
-    )
-    .join("");
+  const rows = entries.map(renderServiceCard).join("");
 
   const errorBanner =
     errors.length > 0

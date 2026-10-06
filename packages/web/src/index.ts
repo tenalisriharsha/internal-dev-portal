@@ -46,6 +46,10 @@ const app = createApp({
   sources,
   templateDir: path.join(repoRoot, "templates", "golden-path-service"),
   generatedDir,
+  escalation: {
+    pagerdutySubdomain: process.env.PAGERDUTY_SUBDOMAIN,
+    opsgenieOrg: process.env.OPSGENIE_ORG,
+  },
 });
 
 store

@@ -25,7 +25,7 @@ export function createCatalogRouter(options: AppOptions): Router {
     }
     const dependents = catalog.getDependents(entry.metadata.name);
     const source = displaySource(options.repoRoot, catalog.sourceFileFor(entry.metadata.name));
-    res.send(renderServiceDetail(entry, dependents, source));
+    res.send(renderServiceDetail(entry, dependents, source, options.escalation ?? {}));
   });
 
   return router;

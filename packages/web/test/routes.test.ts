@@ -13,9 +13,30 @@ let generatedDir: string;
 let templateDir: string;
 let store: CatalogStore;
 let sources: CatalogSource[];
+let options: AppOptions;
 let app: Express;
 
-async function writeExampleService(name: string, dependsOn: string[] = []): Promise<void> {
+interface ServiceOverrides {
+  owner?: string;
+  health?: { lastDeployAt?: string; openIncidents?: number };
+}
+
+async function writeExampleService(
+  name: string,
+  dependsOn: string[] = [],
+  overrides: ServiceOverrides = {},
+): Promise<void> {
+  const owner = overrides.owner ?? "team-example";
+  const healthYaml = overrides.health
+    ? `
+  health:
+${overrides.health.lastDeployAt ? `    lastDeployAt: "${overrides.health.lastDeployAt}"\n` : ""}${
+        overrides.health.openIncidents !== undefined
+          ? `    openIncidents: ${overrides.health.openIncidents}\n`
+          : ""
+      }`
+    : "";
+
   const dir = path.join(catalogDir, name);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
@@ -28,12 +49,12 @@ metadata:
   description: Example service ${name}.
 spec:
   lifecycle: production
-  owner: team-example
+  owner: ${owner}
   dependsOn: [${dependsOn.join(", ")}]
   oncall:
     provider: pagerduty
     rotation: ${name}-primary
-`,
+${healthYaml}`,
     "utf8",
   );
 }
@@ -67,7 +88,7 @@ spec:
   store = new CatalogStore(":memory:");
   sources = [new LocalDirectorySource(catalogDir), new LocalDirectorySource(generatedDir)];
 
-  const options: AppOptions = {
+  options = {
     repoRoot: os.tmpdir(),
     store,
     sources,
@@ -164,6 +185,105 @@ describe("GET /services/:name", () => {
     const res = await request(app).get("/services/does-not-exist");
     expect(res.status).toBe(404);
     expect(res.text).toContain("Service not found");
+  });
+
+  it("renders a health panel with open incidents and last deploy time", async () => {
+    await writeExampleService("checkout-web", [], {
+      health: { lastDeployAt: "2026-01-15T09:00:00Z", openIncidents: 2 },
+    });
+    await refresh();
+
+    const res = await request(app).get("/services/checkout-web");
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("2 open incidents");
+  });
+
+  it("shows a 'no health signal' empty state when health isn't reported", async () => {
+    await writeExampleService("checkout-web");
+    await refresh();
+
+    const res = await request(app).get("/services/checkout-web");
+    expect(res.text).toContain("No health signal reported");
+  });
+
+  it("links a rotation name to the on-call provider when escalation config is set", async () => {
+    await writeExampleService("checkout-web");
+    await refresh();
+
+    const escalatingApp = createApp({ ...options, escalation: { pagerdutySubdomain: "acme" } });
+    const res = await request(escalatingApp).get("/services/checkout-web");
+
+    expect(res.text).toContain("https://acme.pagerduty.com/schedules#/search?query=checkout-web-primary");
+  });
+
+  it("falls back to plain text when no escalation config is set", async () => {
+    await writeExampleService("checkout-web");
+    await refresh();
+
+    const res = await request(app).get("/services/checkout-web");
+    expect(res.text).not.toContain("pagerduty.com/schedules");
+    expect(res.text).toContain("checkout-web-primary");
+  });
+});
+
+describe("GET /teams", () => {
+  it("groups services by owner", async () => {
+    await writeExampleService("user-service", [], { owner: "team-identity" });
+    await writeExampleService("checkout-web", [], { owner: "team-checkout" });
+    await writeExampleService("legacy-cart-service", [], { owner: "team-checkout" });
+    await refresh();
+
+    const res = await request(app).get("/teams");
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("team-identity");
+    expect(res.text).toContain("team-checkout");
+    expect(res.text).toContain("2 services");
+    expect(res.text).toContain("1 service<");
+  });
+
+  it("shows an empty state when there are no teams yet", async () => {
+    const res = await request(app).get("/teams");
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("No teams registered yet");
+  });
+});
+
+describe("GET /teams/:owner", () => {
+  it("lists every service owned by the team and aggregates open incidents", async () => {
+    await writeExampleService("checkout-web", [], {
+      owner: "team-checkout",
+      health: { openIncidents: 2 },
+    });
+    await writeExampleService("legacy-cart-service", [], {
+      owner: "team-checkout",
+      health: { openIncidents: 1 },
+    });
+    await refresh();
+
+    const res = await request(app).get("/teams/team-checkout");
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("checkout-web");
+    expect(res.text).toContain("legacy-cart-service");
+    expect(res.text).toContain("3 open incidents");
+  });
+
+  it("returns 404 for a team that owns no services", async () => {
+    const res = await request(app).get("/teams/team-ghost");
+    expect(res.status).toBe(404);
+    expect(res.text).toContain("Team not found");
+  });
+
+  it("links on-call rotations through escalation config when configured", async () => {
+    await writeExampleService("checkout-web", [], { owner: "team-checkout" });
+    await refresh();
+
+    const escalatingApp = createApp({ ...options, escalation: { pagerdutySubdomain: "acme" } });
+    const res = await request(escalatingApp).get("/teams/team-checkout");
+
+    expect(res.text).toContain("https://acme.pagerduty.com/schedules#/search?query=checkout-web-primary");
   });
 });
 

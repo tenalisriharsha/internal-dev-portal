@@ -16,3 +16,10 @@ export function lifecycleBadge(lifecycle: string): string {
 export function kindBadge(kind: string): string {
   return `<span class="badge badge--kind">${escapeHtml(kind)}</span>`;
 }
+
+/** Renders an open-incident count: 0 is good, 1 is a warning, 2+ is critical. */
+export function healthBadge(openIncidents: number): string {
+  const status = openIncidents === 0 ? "good" : openIncidents === 1 ? "warning" : "critical";
+  const label = `${openIncidents} open incident${openIncidents === 1 ? "" : "s"}`;
+  return `<span class="badge badge--${status}">${escapeHtml(label)}</span>`;
+}
