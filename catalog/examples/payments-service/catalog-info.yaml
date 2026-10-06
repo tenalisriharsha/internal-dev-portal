@@ -12,3 +12,6 @@ spec:
     provider: pagerduty
     rotation: payments-primary
     slack: "#payments-oncall"
+  health:
+    lastDeployAt: "2026-10-04T11:15:00Z"
+    openIncidents: 1

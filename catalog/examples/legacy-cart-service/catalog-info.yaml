@@ -8,3 +8,6 @@ spec:
   lifecycle: deprecated
   owner: team-checkout
   dependsOn: [user-service]
+  health:
+    lastDeployAt: "2025-03-11T10:00:00Z"
+    openIncidents: 0

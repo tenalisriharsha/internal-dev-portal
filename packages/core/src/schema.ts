@@ -17,6 +17,13 @@ export const LifecycleSchema = z.enum([
   "deprecated",
 ]);
 
+export const HealthSchema = z
+  .object({
+    lastDeployAt: z.string().datetime().optional(),
+    openIncidents: z.number().int().min(0).default(0),
+  })
+  .strict();
+
 export const CatalogEntrySchema = z
   .object({
     apiVersion: z.literal("idp.dev/v1"),
@@ -36,6 +43,7 @@ export const CatalogEntrySchema = z
         owner: z.string().min(1),
         dependsOn: z.array(z.string()).default([]),
         oncall: OnCallSchema.optional(),
+        health: HealthSchema.optional(),
       })
       .strict(),
   })
@@ -44,3 +52,4 @@ export const CatalogEntrySchema = z
 export type CatalogEntry = z.infer<typeof CatalogEntrySchema>;
 export type OnCall = z.infer<typeof OnCallSchema>;
 export type Lifecycle = z.infer<typeof LifecycleSchema>;
+export type Health = z.infer<typeof HealthSchema>;

@@ -12,3 +12,6 @@ spec:
     provider: opsgenie
     rotation: checkout-primary
     slack: "#checkout-oncall"
+  health:
+    lastDeployAt: "2026-10-06T08:45:00Z"
+    openIncidents: 2

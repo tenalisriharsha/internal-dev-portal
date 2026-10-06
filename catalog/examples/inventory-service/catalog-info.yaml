@@ -12,3 +12,6 @@ spec:
     provider: pagerduty
     rotation: inventory-primary
     slack: "#inventory-oncall"
+  health:
+    lastDeployAt: "2026-09-28T16:00:00Z"
+    openIncidents: 0

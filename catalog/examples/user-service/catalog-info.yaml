@@ -12,3 +12,6 @@ spec:
     provider: pagerduty
     rotation: identity-primary
     slack: "#identity-oncall"
+  health:
+    lastDeployAt: "2026-10-05T14:30:00Z"
+    openIncidents: 0
