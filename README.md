@@ -35,6 +35,16 @@ golden-path template.
 
 ![Create new service form filled out](docs/screenshots/05-create-form-filled.png)
 
+**Golden paths, plural** — a "Kind" selector picks which golden-path template
+to scaffold from (`Service`, `Website`, or `Library`); each renders its own
+template directory, not just a different `catalog-info.yaml` value.
+
+![Create new service form with Kind set to Website](docs/screenshots/12-create-form-kind-website.png)
+
+![Service created from the website golden path, listing its generated files](docs/screenshots/13-create-success-website.png)
+
+![Catalog list showing Service, Website, and Library kind badges side by side](docs/screenshots/14-catalog-list-mixed-kinds.png)
+
 **Scaffold result** — the real files generated on disk and registered in the
 catalog immediately.
 
@@ -82,10 +92,16 @@ An npm-workspaces monorepo with two TypeScript packages:
   interface) feeding a validating catalog loader, a SQLite-backed
   `CatalogStore` that persists the last-loaded snapshot, a scheduler that
   refreshes the store on an interval, a dependency-graph builder with cycle
-  detection, and a template engine that renders the golden-path scaffold.
+  detection, and a template engine that renders a golden-path scaffold
+  (variable substitution only — no conditionals/loops yet, since no template
+  has needed them).
 - **`@idp/web`** — a server-rendered Express app (catalog list, service
   detail, team pages, dependency graph, create flow, and an `/admin/refresh`
-  trigger) built on top of `@idp/core`. Every page read is a SQLite read, not
+  trigger) built on top of `@idp/core`. The create flow renders one of three
+  golden-path templates (`templates/golden-path-service`,
+  `-website`, `-library`) selected by a "Kind" field in the form — adding a
+  template is adding a directory and a `templateDirs` entry, the rendering
+  engine itself didn't change. Every page read is a SQLite read, not
   a re-fetch — the catalog only changes on an explicit refresh (scheduled,
   button-triggered, or after the create flow scaffolds a new service). Team
   pages (`/teams`, `/teams/:owner`) group services by `spec.owner` with no
@@ -141,7 +157,9 @@ network call.
 packages/core/            catalog schema, sources, SQLite store, scheduler, dependency graph, template engine
 packages/web/             Express app: catalog UI, service detail, graph, create flow, admin refresh
 catalog/examples/         example catalog-info.yaml fixtures (stand-ins for "other repos")
-templates/golden-path-service/  the scaffold the self-service flow renders
+templates/golden-path-service/   golden path for kind: Service
+templates/golden-path-website/   golden path for kind: Website
+templates/golden-path-library/   golden path for kind: Library
 generated/                where self-service "create new service" writes new services
 docs/screenshots/         screenshots used in this README
 catalog.db                 (gitignored) persisted catalog snapshot, created on first run

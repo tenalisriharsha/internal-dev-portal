@@ -29,7 +29,9 @@ internal-dev-portal/
     core/   @idp/core  — schema, sources (local dir + GitHub), SQLite store, scheduler, graph, template engine
     web/    @idp/web   — Express server: catalog UI, service detail, graph view, create flow, admin refresh
   catalog/examples/     — example catalog-info.yaml fixtures (stand-ins for "other repos")
-  templates/golden-path-service/  — the scaffold the self-service flow renders
+  templates/golden-path-service/  — golden path for kind: Service
+  templates/golden-path-website/  — golden path for kind: Website
+  templates/golden-path-library/  — golden path for kind: Library
   generated/            — where self-service "create new service" writes new services
   catalog.db            — (gitignored) persisted catalog snapshot, created on first run
 ```
@@ -65,7 +67,9 @@ internal-dev-portal/
   cycles (DFS), and can topologically sort services.
 - `template.ts` — renders a directory of `*.tmpl` files with `{{variable}}`
   substitution into a fresh output directory, refusing to overwrite an
-  existing one.
+  existing one. Unchanged since Phase 1: Phase 4 added a second and third
+  template directory, not a second rendering engine — `renderTemplate` has no
+  idea there's more than one golden path.
 
 **`@idp/web`** is a server-rendered Express app (no client-side framework,
 no build step beyond `ts-node`) with four pages plus one action route:
@@ -88,9 +92,10 @@ no build step beyond `ts-node`) with four pages plus one action route:
   service declares that owner.
 - `/graph` — the full dependency graph as a hand-laid-out SVG, nodes colored
   by lifecycle status.
-- `/create` — a form that scaffolds a brand-new service from
-  `templates/golden-path-service` straight into `generated/`, then calls
-  `store.refresh` so it's in the catalog on the very next page load.
+- `/create` — a form that scaffolds a brand-new service, website, or library
+  (a "Kind" field picks which golden-path template to render) straight into
+  `generated/`, then calls `store.refresh` so it's in the catalog on the
+  very next page load.
 - `POST /admin/refresh` — re-runs `store.refresh(sources)` and redirects back
   (defaults to `/`, accepts a same-origin-only `redirectTo`). This is the
   button's target today; a repo webhook could POST to the same URL once
@@ -178,38 +183,63 @@ drawing the `CatalogSource`/`Catalog` boundary where Phase 1 did.
         health panel + linked rotation) — 11 screenshots total, all
         verified
 
-- [ ] **Phase 4 — Golden paths, plural**
-  - [ ] More than one template (`golden-path-service`, `golden-path-website`,
-        `golden-path-library`), selectable in the create flow
-  - [ ] Template variables beyond string substitution (conditional blocks,
-        loops) if a real template needs them
-  - [ ] Optional: scaffold directly into a new GitHub repo via the GitHub API
-        instead of only into `generated/`
+- [x] **Phase 4 — Golden paths, plural** *(tonight)*
+  - [x] Three golden-path templates (`golden-path-service`,
+        `golden-path-website`, `golden-path-library`), each a real
+        `kind`-specific scaffold: the website template renders a static
+        `src/index.html` with a `serve`-based `dev` script, the library
+        template renders a `tsc`-buildable `src/index.ts` with no `dev`
+        script (libraries don't run), matching how each kind actually gets
+        used rather than reusing the service template with the `kind` field
+        swapped
+  - [x] `options.templateDir` (one path) became `options.templateDirs`
+        (a `Record<CatalogEntry["kind"], string>`); a "Kind" `<select>` in
+        the create form drives which entry `routes/create.ts` renders from,
+        and which `kind` gets written into the generated `catalog-info.yaml`
+  - [x] `template.ts`'s render function needed no changes at all — adding a
+        template was adding a directory and a map entry, not touching the
+        engine, exactly as scoped last session
+  - [x] Deferred (unchanged from last session's scoping): template
+        variables beyond `{{variable}}` substitution (no template has
+        needed conditionals/loops yet) and scaffolding straight into a new
+        GitHub repo via the GitHub API (bigger jump — needs a repo-create
+        token and real network calls in a place that's been
+        injectable-fetch-only so far); both are reasonable Phase 5 stretch
+        goals, not required for "golden paths, plural" itself
+  - [x] 7 new/updated tests (website- and library-kind scaffolds, default-
+        to-Service when `kind` is omitted, invalid-`kind` rejection, Kind
+        selector rendered on the form) — 82 tests total, all passing; both
+        packages type-check clean
+  - [x] 3 new screenshots (Kind selector set to Website, the website
+        scaffold's success page, and the catalog list showing Service/
+        Website/Library badges side by side) — 14 screenshots total, all
+        verified
 
 - [ ] **Phase 5 — Polish & deploy**
   - [ ] Authentication (even a simple shared-secret gate) before this is
         exposed beyond localhost
   - [ ] Deployed demo instance + CI (lint, typecheck, test on every push)
   - [ ] Search/filter on the catalog list; sort/group by owner or lifecycle
+  - [ ] Optional stretch (deferred from Phase 4): scaffold directly into a
+        new GitHub repo via the GitHub API instead of only into `generated/`
 
 ## Where to resume (next session)
 
-Start **Phase 4 — Golden paths, plural**. The concrete first step: a second
-template directory (e.g. `templates/golden-path-website` or
-`templates/golden-path-library`, matching the `kind` enum already in the
-schema) alongside the existing `templates/golden-path-service`. The create
-flow currently hard-codes `options.templateDir` to a single directory
-(`packages/web/src/options.ts` / `routes/create.ts`); the natural shape is
-`templateDir` becoming a map keyed by `kind` (or a list the create form can
-select from), with `template.ts`'s render function staying exactly as-is —
-it already just renders one directory of `*.tmpl` files into one output
-directory, so adding a second template is adding a second directory, not
-changing the engine. Once two templates exist, revisit whether substitution
-needs anything beyond `{{variable}}` (conditionals/loops) — don't build that
-speculatively before a real template needs it. Scaffolding straight into a
-new GitHub repo via the GitHub API is a reasonable stretch goal for the same
-phase, but it's a bigger jump (needs a GitHub token with repo-create scope,
-real network calls in a place that's been injectable-fetch-only so far) —
-sequence it after the plural-template work, not before.
+Start **Phase 5 — Polish & deploy**. The concrete first step: authentication.
+Right now every route — including `POST /admin/refresh` and `POST /create`,
+both of which mutate state — is open to anyone who can reach the port. A
+simple shared-secret gate (an `ADMIN_TOKEN` env var checked via middleware,
+either a header on admin/create routes or a basic HTTP-auth prompt in front
+of the whole app) is enough for a localhost/demo deploy; a real identity
+provider is out of scope for this project's size. After that: a minimal CI
+workflow (`npm test` + `npx tsc --noEmit` in both packages on every push —
+note `npm run lint` at the root currently fails because there's no root
+`tsconfig.json` for `tsc --build`, worth fixing as part of wiring up CI
+rather than leaving each package to be checked by hand) and a deployed demo
+instance so the preview screenshots have a live companion. Search/filter on
+the catalog list is the lowest-risk, highest-visible-payoff item if there's
+time left after auth and CI — `catalog.list()` already returns the full
+`CatalogEntry[]`, so it's a client-side or query-param filter over data
+that's already there, no new backend plumbing needed.
 
 STATUS: IN_PROGRESS
