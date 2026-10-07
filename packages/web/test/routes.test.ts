@@ -10,7 +10,9 @@ import type { AppOptions } from "../src/options";
 
 let catalogDir: string;
 let generatedDir: string;
-let templateDir: string;
+let serviceTemplateDir: string;
+let websiteTemplateDir: string;
+let libraryTemplateDir: string;
 let store: CatalogStore;
 let sources: CatalogSource[];
 let options: AppOptions;
@@ -67,12 +69,15 @@ async function refresh(): Promise<void> {
 beforeEach(async () => {
   catalogDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-catalog-"));
   generatedDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-generated-"));
-  templateDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-template-"));
+  serviceTemplateDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-template-service-"));
+  websiteTemplateDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-template-website-"));
+  libraryTemplateDir = await fs.mkdtemp(path.join(os.tmpdir(), "idp-web-template-library-"));
 
-  await fs.writeFile(
-    path.join(templateDir, "catalog-info.yaml.tmpl"),
-    `apiVersion: idp.dev/v1
-kind: Service
+  async function writeTemplate(dir: string, kind: string): Promise<void> {
+    await fs.writeFile(
+      path.join(dir, "catalog-info.yaml.tmpl"),
+      `apiVersion: idp.dev/v1
+kind: ${kind}
 metadata:
   name: {{name}}
   description: {{description}}
@@ -81,9 +86,14 @@ spec:
   owner: {{owner}}
   dependsOn: {{dependsOnYaml}}
 `,
-    "utf8",
-  );
-  await fs.writeFile(path.join(templateDir, "README.md.tmpl"), "# {{name}}\n", "utf8");
+      "utf8",
+    );
+    await fs.writeFile(path.join(dir, "README.md.tmpl"), "# {{name}}\n", "utf8");
+  }
+
+  await writeTemplate(serviceTemplateDir, "Service");
+  await writeTemplate(websiteTemplateDir, "Website");
+  await writeTemplate(libraryTemplateDir, "Library");
 
   store = new CatalogStore(":memory:");
   sources = [new LocalDirectorySource(catalogDir), new LocalDirectorySource(generatedDir)];
@@ -92,7 +102,11 @@ spec:
     repoRoot: os.tmpdir(),
     store,
     sources,
-    templateDir,
+    templateDirs: {
+      Service: serviceTemplateDir,
+      Website: websiteTemplateDir,
+      Library: libraryTemplateDir,
+    },
     generatedDir,
   };
   app = createApp(options);
@@ -102,7 +116,9 @@ afterEach(async () => {
   store.close();
   await fs.rm(catalogDir, { recursive: true, force: true });
   await fs.rm(generatedDir, { recursive: true, force: true });
-  await fs.rm(templateDir, { recursive: true, force: true });
+  await fs.rm(serviceTemplateDir, { recursive: true, force: true });
+  await fs.rm(websiteTemplateDir, { recursive: true, force: true });
+  await fs.rm(libraryTemplateDir, { recursive: true, force: true });
 });
 
 describe("GET /", () => {
@@ -336,6 +352,9 @@ describe("GET /create", () => {
     expect(res.status).toBe(200);
     expect(res.text).toContain("Create New Service");
     expect(res.text).toContain('name="name"');
+    expect(res.text).toContain('<select name="kind">');
+    expect(res.text).toContain(">Website<");
+    expect(res.text).toContain(">Library<");
   });
 });
 
@@ -368,6 +387,79 @@ describe("POST /create", () => {
 
     const detailRes = await request(app).get("/services/billing-service");
     expect(detailRes.status).toBe(200);
+  });
+
+  it("scaffolds a website from the website golden path when kind is Website", async () => {
+    const res = await request(app).post("/create").type("form").send({
+      name: "marketing-site",
+      description: "Public marketing site.",
+      owner: "team-marketing",
+      kind: "Website",
+      lifecycle: "experimental",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("marketing-site");
+
+    const generatedFile = await fs.readFile(
+      path.join(generatedDir, "marketing-site", "catalog-info.yaml"),
+      "utf8",
+    );
+    expect(generatedFile).toContain("kind: Website");
+  });
+
+  it("scaffolds a library from the library golden path when kind is Library", async () => {
+    const res = await request(app).post("/create").type("form").send({
+      name: "shared-utils",
+      description: "Shared utility functions.",
+      owner: "team-platform",
+      kind: "Library",
+      lifecycle: "experimental",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("shared-utils");
+
+    const generatedFile = await fs.readFile(
+      path.join(generatedDir, "shared-utils", "catalog-info.yaml"),
+      "utf8",
+    );
+    expect(generatedFile).toContain("kind: Library");
+  });
+
+  it("defaults to the service golden path when kind is omitted", async () => {
+    const res = await request(app).post("/create").type("form").send({
+      name: "default-kind-service",
+      description: "x",
+      owner: "team-example",
+      lifecycle: "experimental",
+    });
+
+    expect(res.status).toBe(200);
+    const generatedFile = await fs.readFile(
+      path.join(generatedDir, "default-kind-service", "catalog-info.yaml"),
+      "utf8",
+    );
+    expect(generatedFile).toContain("kind: Service");
+  });
+
+  it("rejects an invalid kind", async () => {
+    const res = await request(app).post("/create").type("form").send({
+      name: "bad-kind-service",
+      description: "x",
+      owner: "team-example",
+      kind: "Database",
+      lifecycle: "experimental",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.text).toContain("Could not create service");
+
+    const exists = await fs
+      .access(path.join(generatedDir, "bad-kind-service"))
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(false);
   });
 
   it("rejects a name that collides with an existing service", async () => {

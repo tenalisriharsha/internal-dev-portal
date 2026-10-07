@@ -12,6 +12,8 @@ function normalizeDependsOn(raw: unknown): string[] {
   return [];
 }
 
+type Kind = "Service" | "Website" | "Library";
+
 export function createCreateRouter(options: AppOptions): Router {
   const router = Router();
 
@@ -22,6 +24,7 @@ export function createCreateRouter(options: AppOptions): Router {
         name: "",
         description: "",
         owner: "",
+        kind: "Service",
         lifecycle: "experimental",
         dependsOn: [],
       }),
@@ -35,6 +38,7 @@ export function createCreateRouter(options: AppOptions): Router {
       name: typeof req.body.name === "string" ? req.body.name.trim() : "",
       description: typeof req.body.description === "string" ? req.body.description.trim() : "",
       owner: typeof req.body.owner === "string" ? req.body.owner.trim() : "",
+      kind: typeof req.body.kind === "string" ? req.body.kind : "Service",
       lifecycle: typeof req.body.lifecycle === "string" ? req.body.lifecycle : "experimental",
       dependsOn: normalizeDependsOn(req.body.dependsOn).filter((dep) => catalog.has(dep)),
     };
@@ -47,7 +51,7 @@ export function createCreateRouter(options: AppOptions): Router {
 
     const candidate = {
       apiVersion: "idp.dev/v1" as const,
-      kind: "Service" as const,
+      kind: submitted.kind as Kind,
       metadata: {
         name: submitted.name,
         description: submitted.description,
@@ -73,8 +77,9 @@ export function createCreateRouter(options: AppOptions): Router {
     }
 
     const outputDir = path.join(options.generatedDir, submitted.name);
+    const templateDir = options.templateDirs[submitted.kind as Kind];
     try {
-      const files = await renderTemplate(options.templateDir, outputDir, {
+      const files = await renderTemplate(templateDir, outputDir, {
         name: submitted.name,
         description: submitted.description,
         owner: submitted.owner,

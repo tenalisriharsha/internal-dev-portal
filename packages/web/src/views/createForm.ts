@@ -6,11 +6,13 @@ export interface CreateFormValues {
   name: string;
   description: string;
   owner: string;
+  kind: string;
   lifecycle: string;
   dependsOn: string[];
 }
 
 const LIFECYCLES = ["experimental", "staging", "production", "deprecated"];
+const KINDS = ["Service", "Website", "Library"];
 
 export function renderCreateForm(
   existingServices: CatalogEntry[],
@@ -20,6 +22,10 @@ export function renderCreateForm(
   const lifecycleOptions = LIFECYCLES.map(
     (lifecycle) =>
       `<option value="${lifecycle}" ${values.lifecycle === lifecycle ? "selected" : ""}>${lifecycle}</option>`,
+  ).join("");
+
+  const kindOptions = KINDS.map(
+    (kind) => `<option value="${kind}" ${values.kind === kind ? "selected" : ""}>${kind}</option>`,
   ).join("");
 
   const dependencyCheckboxes = existingServices
@@ -60,6 +66,12 @@ export function renderCreateForm(
       <label class="form-field">
         <span>Owning team</span>
         <input type="text" name="owner" placeholder="team-billing" value="${escapeHtml(values.owner)}" required />
+      </label>
+
+      <label class="form-field">
+        <span>Kind</span>
+        <select name="kind">${kindOptions}</select>
+        <small>Which golden-path template to scaffold from.</small>
       </label>
 
       <label class="form-field">

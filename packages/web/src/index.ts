@@ -44,7 +44,11 @@ const app = createApp({
   repoRoot,
   store,
   sources,
-  templateDir: path.join(repoRoot, "templates", "golden-path-service"),
+  templateDirs: {
+    Service: path.join(repoRoot, "templates", "golden-path-service"),
+    Website: path.join(repoRoot, "templates", "golden-path-website"),
+    Library: path.join(repoRoot, "templates", "golden-path-library"),
+  },
   generatedDir,
   escalation: {
     pagerdutySubdomain: process.env.PAGERDUTY_SUBDOMAIN,
