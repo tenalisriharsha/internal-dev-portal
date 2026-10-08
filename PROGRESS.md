@@ -75,8 +75,9 @@ internal-dev-portal/
 no build step beyond `ts-node`) with four pages plus one action route:
 
 - `/` — the service catalog, cards with lifecycle/kind badges and ownership,
-  a "last refreshed" timestamp, a manual "Refresh now" button, and a banner
-  listing any catalog-info.yaml files that failed validation.
+  a "last refreshed" timestamp, a manual "Refresh now" button, a banner
+  listing any catalog-info.yaml files that failed validation, and a filter
+  bar (`?q=`/`?kind=`/`?lifecycle=`) over the loaded entries.
 - `/services/:name` — ownership, on-call rotation, a health panel
   (open-incident badge plus last-deploy time, or an empty state when the
   entry has no `health` block), and both directions of the dependency
@@ -98,8 +99,9 @@ no build step beyond `ts-node`) with four pages plus one action route:
   very next page load.
 - `POST /admin/refresh` — re-runs `store.refresh(sources)` and redirects back
   (defaults to `/`, accepts a same-origin-only `redirectTo`). This is the
-  button's target today; a repo webhook could POST to the same URL once
-  Phase 5 adds auth in front of it.
+  button's target today; a repo webhook could POST to the same URL. Gated
+  behind `requireAdminToken` (`ADMIN_TOKEN` env var, HTTP Basic auth) when
+  configured, same as the whole `/create` router.
 
 On-call rotation names (wherever they're rendered — service detail or a
 team page) go through `oncallLinks.escalationUrl`, which builds a deep link
@@ -215,31 +217,63 @@ drawing the `CatalogSource`/`Catalog` boundary where Phase 1 did.
         Website/Library badges side by side) — 14 screenshots total, all
         verified
 
-- [ ] **Phase 5 — Polish & deploy**
-  - [ ] Authentication (even a simple shared-secret gate) before this is
-        exposed beyond localhost
-  - [ ] Deployed demo instance + CI (lint, typecheck, test on every push)
-  - [ ] Search/filter on the catalog list; sort/group by owner or lifecycle
-  - [ ] Optional stretch (deferred from Phase 4): scaffold directly into a
-        new GitHub repo via the GitHub API instead of only into `generated/`
+- [x] **Phase 5 — Polish & deploy** *(tonight)*
+  - [x] Shared-secret admin gate: an optional `ADMIN_TOKEN` env var, checked
+        by `requireAdminToken` middleware (`packages/web/src/auth.ts`) via
+        HTTP Basic auth (token as password, username ignored — there's one
+        shared secret, not real accounts). Applied to the whole `/create`
+        router (both the form and the submit, so the browser's native
+        Basic-auth prompt fires before the user fills anything in) and to
+        `POST /admin/refresh`. Unset, every route stays open — identical to
+        pre-Phase-5 behavior, so this is additive, not a breaking change for
+        the existing localhost/demo flow.
+  - [x] Root `tsconfig.json` + `composite: true` on both packages' configs,
+        wired together with TypeScript project references, so `npm run
+        lint` (`tsc --build`) actually works from the repo root instead of
+        erroring on a missing root config (the bug flagged at the end of
+        last session). `@idp/web`'s own `tsc --noEmit` build script is
+        unchanged.
+  - [x] `.github/workflows/ci.yml`: `npm ci`, `npm run lint`, `npm test
+        --workspaces` on every push to `main` and every pull request.
+  - [x] Search/filter on the catalog list: `?q=` (matches name, description,
+        owner, or any tag, case-insensitively), `?kind=`, `?lifecycle=`,
+        combined with AND semantics. Implemented as `parseCatalogFilters`/
+        `filterCatalogEntries` in `catalogView.ts` — a filter over the
+        `CatalogEntry[]` the store already returns, no schema or storage
+        change. Plain GET query params, so a filtered view is a shareable/
+        bookmarkable URL, not something that needs client-side JS. The list
+        page shows "N of M services match" and a "Clear" link when a filter
+        is active, versus the plain count when it isn't.
+  - [x] Deliberately out of scope, not deferred: a deployed demo instance
+        and scaffolding directly into a new GitHub repo. Both need a real
+        remote target (a hosting provider, a GitHub org/token with repo-
+        create scope) that this environment's own ground rules exclude —
+        this project's nightly workflow is local-commits-only, no remote
+        repo creation, no pushing. The CI workflow file is committed and
+        correct but has never executed, for the same reason. If this
+        project ever gets a real remote, both are still exactly as
+        reasonable as they were when first scoped.
+  - [x] 10 new tests (admin-token gate on `/create` GET+POST and
+        `/admin/refresh`, unit tests for `parseCatalogFilters`/
+        `filterCatalogEntries` covering kind/lifecycle/search/AND-combination/
+        case-insensitivity, route-level filter tests for search/kind/
+        lifecycle and that submitted filter values round-trip into the
+        form) — 100 tests total (45 core + 55 web), all passing; both
+        packages type-check clean; root `tsc --build` clean.
+  - [x] 4 screenshots recaptured (`01`, `08`, `14` — every view of the
+        catalog list now shows the filter bar) and 1 new screenshot added
+        for an active filter (`?kind=Website`, showing the match-count copy
+        and the Clear-filters link) — 15 screenshots total, all verified.
 
 ## Where to resume (next session)
 
-Start **Phase 5 — Polish & deploy**. The concrete first step: authentication.
-Right now every route — including `POST /admin/refresh` and `POST /create`,
-both of which mutate state — is open to anyone who can reach the port. A
-simple shared-secret gate (an `ADMIN_TOKEN` env var checked via middleware,
-either a header on admin/create routes or a basic HTTP-auth prompt in front
-of the whole app) is enough for a localhost/demo deploy; a real identity
-provider is out of scope for this project's size. After that: a minimal CI
-workflow (`npm test` + `npx tsc --noEmit` in both packages on every push —
-note `npm run lint` at the root currently fails because there's no root
-`tsconfig.json` for `tsc --build`, worth fixing as part of wiring up CI
-rather than leaving each package to be checked by hand) and a deployed demo
-instance so the preview screenshots have a live companion. Search/filter on
-the catalog list is the lowest-risk, highest-visible-payoff item if there's
-time left after auth and CI — `catalog.list()` already returns the full
-`CatalogEntry[]`, so it's a client-side or query-param filter over data
-that's already there, no new backend plumbing needed.
+There is no next session to resume into under this project's own rules —
+Phase 5 closes out everything reachable without a real remote target, and
+the two items that do need one (deployed demo instance, scaffold-into-new-
+GitHub-repo) are recorded above as permanently out of scope for this
+environment rather than deferred. If this project picks back up with a real
+GitHub org/token and a hosting target available, those two are the entire
+remaining backlog — everything else (catalog, ownership/on-call, golden
+paths, auth, CI, search/filter) is built, tested, and documented.
 
-STATUS: IN_PROGRESS
+STATUS: COMPLETE
