@@ -108,6 +108,23 @@ code {
   font-size: 13px;
 }
 
+.filter-bar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.filter-bar .form-field {
+  gap: 4px;
+}
+
+.filter-bar input[type="text"],
+.filter-bar select {
+  min-width: 160px;
+}
+
 /* Service catalog grid */
 .service-grid {
   display: grid;

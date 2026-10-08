@@ -1,19 +1,21 @@
 import { Router } from "express";
 import type { AppOptions } from "../options";
-import { displaySource, readCatalog } from "../catalogView";
+import { displaySource, filterCatalogEntries, parseCatalogFilters, readCatalog } from "../catalogView";
 import { renderCatalogList } from "../views/catalogList";
 import { renderServiceDetail, renderServiceNotFound } from "../views/serviceDetail";
 
 export function createCatalogRouter(options: AppOptions): Router {
   const router = Router();
 
-  router.get("/", (_req, res) => {
+  router.get("/", (req, res) => {
     const catalog = readCatalog(options);
     const errors = catalog.errors.map((issue) => ({
       ...issue,
       file: displaySource(options.repoRoot, issue.file) ?? issue.file,
     }));
-    res.send(renderCatalogList(catalog.list(), errors, options.store.refreshedAt()));
+    const filters = parseCatalogFilters(req.query as Record<string, unknown>);
+    const entries = filterCatalogEntries(catalog.list(), filters);
+    res.send(renderCatalogList(entries, errors, options.store.refreshedAt(), filters, catalog.size));
   });
 
   router.get("/services/:name", (req, res) => {
