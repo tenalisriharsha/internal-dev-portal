@@ -168,6 +168,45 @@ describe("GET /", () => {
     expect(res.text).toContain("failed validation");
     expect(res.text).toMatch(/invalid YAML/);
   });
+
+  it("filters by search term across name, description, and owner", async () => {
+    await writeExampleService("user-service", [], { owner: "team-identity" });
+    await writeExampleService("checkout-web", [], { owner: "team-checkout" });
+    await refresh();
+
+    const res = await request(app).get("/").query({ q: "team-checkout" });
+    expect(res.text).toContain("checkout-web");
+    expect(res.text).not.toContain(">user-service<");
+    expect(res.text).toContain("1 of 2 services match");
+  });
+
+  it("filters by kind", async () => {
+    await writeExampleService("user-service");
+    await refresh();
+
+    const res = await request(app).get("/").query({ kind: "Website" });
+    expect(res.text).toContain("No services match these filters");
+    expect(res.text).not.toContain(">user-service<");
+  });
+
+  it("filters by lifecycle", async () => {
+    await writeExampleService("user-service");
+    await refresh();
+
+    const matching = await request(app).get("/").query({ lifecycle: "production" });
+    expect(matching.text).toContain(">user-service<");
+
+    const nonMatching = await request(app).get("/").query({ lifecycle: "deprecated" });
+    expect(nonMatching.text).not.toContain(">user-service<");
+  });
+
+  it("preserves the submitted filter values in the form", async () => {
+    await refresh();
+    const res = await request(app).get("/").query({ q: "billing", kind: "Service", lifecycle: "staging" });
+    expect(res.text).toContain('value="billing"');
+    expect(res.text).toContain('<option value="Service" selected>Service</option>');
+    expect(res.text).toContain('<option value="staging" selected>staging</option>');
+  });
 });
 
 describe("GET /services/:name", () => {
@@ -344,6 +383,23 @@ describe("POST /admin/refresh", () => {
     const res = await request(app).post("/admin/refresh").query({ redirectTo: "/graph" });
     expect(res.headers.location).toBe("/graph");
   });
+
+  it("requires the admin token when one is configured", async () => {
+    const gatedApp = createApp({ ...options, adminToken: "secret" });
+
+    const unauthorized = await request(gatedApp).post("/admin/refresh");
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers["www-authenticate"]).toContain("Basic");
+
+    const authorized = await request(gatedApp).post("/admin/refresh").auth("admin", "secret");
+    expect(authorized.status).toBe(303);
+  });
+
+  it("rejects an incorrect admin token", async () => {
+    const gatedApp = createApp({ ...options, adminToken: "secret" });
+    const res = await request(gatedApp).post("/admin/refresh").auth("admin", "wrong");
+    expect(res.status).toBe(401);
+  });
 });
 
 describe("GET /create", () => {
@@ -355,6 +411,16 @@ describe("GET /create", () => {
     expect(res.text).toContain('<select name="kind">');
     expect(res.text).toContain(">Website<");
     expect(res.text).toContain(">Library<");
+  });
+
+  it("requires the admin token when one is configured", async () => {
+    const gatedApp = createApp({ ...options, adminToken: "secret" });
+
+    const unauthorized = await request(gatedApp).get("/create");
+    expect(unauthorized.status).toBe(401);
+
+    const authorized = await request(gatedApp).get("/create").auth("admin", "secret");
+    expect(authorized.status).toBe(200);
   });
 });
 
@@ -387,6 +453,22 @@ describe("POST /create", () => {
 
     const detailRes = await request(app).get("/services/billing-service");
     expect(detailRes.status).toBe(200);
+  });
+
+  it("requires the admin token when one is configured", async () => {
+    const gatedApp = createApp({ ...options, adminToken: "secret" });
+    const payload = {
+      name: "gated-service",
+      description: "x",
+      owner: "team-example",
+      lifecycle: "experimental",
+    };
+
+    const unauthorized = await request(gatedApp).post("/create").type("form").send(payload);
+    expect(unauthorized.status).toBe(401);
+
+    const authorized = await request(gatedApp).post("/create").auth("admin", "secret").type("form").send(payload);
+    expect(authorized.status).toBe(200);
   });
 
   it("scaffolds a website from the website golden path when kind is Website", async () => {
