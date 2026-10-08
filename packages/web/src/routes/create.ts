@@ -1,6 +1,7 @@
 import path from "node:path";
 import { CatalogEntrySchema, renderTemplate } from "@idp/core";
 import { Router } from "express";
+import { requireAdminToken } from "../auth";
 import type { AppOptions } from "../options";
 import { readCatalog } from "../catalogView";
 import { renderCreateForm, type CreateFormValues } from "../views/createForm";
@@ -16,6 +17,7 @@ type Kind = "Service" | "Website" | "Library";
 
 export function createCreateRouter(options: AppOptions): Router {
   const router = Router();
+  router.use("/create", requireAdminToken(options.adminToken));
 
   router.get("/create", (_req, res) => {
     const catalog = readCatalog(options);

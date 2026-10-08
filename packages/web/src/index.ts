@@ -54,6 +54,7 @@ const app = createApp({
     pagerdutySubdomain: process.env.PAGERDUTY_SUBDOMAIN,
     opsgenieOrg: process.env.OPSGENIE_ORG,
   },
+  adminToken: process.env.ADMIN_TOKEN,
 });
 
 store

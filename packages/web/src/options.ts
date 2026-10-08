@@ -17,4 +17,6 @@ export interface AppOptions {
   generatedDir: string;
   /** Optional deep-link config for turning on-call rotation names into provider schedule links. */
   escalation?: EscalationConfig;
+  /** When set, POST /admin/refresh and POST /create require this as a Basic-auth password. */
+  adminToken?: string;
 }

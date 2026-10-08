@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAdminToken } from "../auth";
 import type { AppOptions } from "../options";
 
 /**
@@ -10,7 +11,7 @@ import type { AppOptions } from "../options";
 export function createAdminRouter(options: AppOptions): Router {
   const router = Router();
 
-  router.post("/admin/refresh", async (req, res) => {
+  router.post("/admin/refresh", requireAdminToken(options.adminToken), async (req, res) => {
     await options.store.refresh(options.sources);
     const requested = typeof req.query.redirectTo === "string" ? req.query.redirectTo : "/";
     // Only ever redirect back into this app — reject anything that could send a browser elsewhere.
