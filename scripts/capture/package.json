@@ -1,0 +1,7 @@
+{
+  "name": "internal-dev-portal-capture",
+  "private": true,
+  "description": "Regenerates the README screenshots by running the real tool and the real dashboard.",
+  "scripts": { "capture": "node capture.mjs" },
+  "devDependencies": { "playwright-core": "^1.49.0" }
+}
