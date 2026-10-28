@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import yaml from "js-yaml";
 
 export interface TemplateVariables {
   name: string;
@@ -9,12 +10,31 @@ export interface TemplateVariables {
   [key: string]: string;
 }
 
-function renderString(content: string, variables: TemplateVariables): string {
+/**
+ * Variables whose value is itself pre-formatted YAML syntax (e.g. a flow
+ * sequence like `[a, b]`) rather than a plain scalar, and so must be
+ * inserted verbatim instead of being quoted as a string.
+ */
+const RAW_YAML_SUFFIX = "Yaml";
+
+function yamlScalar(value: string): string {
+  return yaml.dump(value, { forceQuotes: true, quotingType: '"' }).trim();
+}
+
+function renderString(
+  content: string,
+  variables: TemplateVariables,
+  yamlSafe: boolean,
+): string {
   return content.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) => {
     if (!(key in variables)) {
       throw new Error(`template references unknown variable "${key}"`);
     }
-    return variables[key];
+    const value = variables[key];
+    if (yamlSafe && !key.endsWith(RAW_YAML_SUFFIX)) {
+      return yamlScalar(value);
+    }
+    return value;
   });
 }
 
@@ -61,10 +81,11 @@ export async function renderTemplate(
     const targetRelative = relative.endsWith(".tmpl")
       ? relative.slice(0, -".tmpl".length)
       : relative;
-    const targetPath = path.join(outputDir, renderString(targetRelative, variables));
+    const targetPath = path.join(outputDir, renderString(targetRelative, variables, false));
 
     const raw = await fs.readFile(sourceFile, "utf8");
-    const rendered = renderString(raw, variables);
+    const isYaml = /\.ya?ml$/.test(targetRelative);
+    const rendered = renderString(raw, variables, isYaml);
 
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, rendered, "utf8");
