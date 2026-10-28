@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CatalogStore, LocalDirectorySource, type CatalogSource } from "@idp/core";
+import { CatalogEntrySchema, CatalogStore, LocalDirectorySource, type CatalogSource } from "@idp/core";
+import yaml from "js-yaml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
@@ -445,13 +446,42 @@ describe("POST /create", () => {
       path.join(generatedDir, "billing-service", "catalog-info.yaml"),
       "utf8",
     );
-    expect(generatedFile).toContain("name: billing-service");
-    expect(generatedFile).toContain("dependsOn: [user-service]");
+    const parsed = yaml.load(generatedFile) as { metadata: { name: string }; spec: { dependsOn: string[] } };
+    expect(parsed.metadata.name).toBe("billing-service");
+    expect(parsed.spec.dependsOn).toEqual(["user-service"]);
 
     const listRes = await request(app).get("/");
     expect(listRes.text).toContain("billing-service");
 
     const detailRes = await request(app).get("/services/billing-service");
+    expect(detailRes.status).toBe(200);
+  });
+
+  it("scaffolds a service whose description contains YAML-significant characters", async () => {
+    const createRes = await request(app).post("/create").type("form").send({
+      name: "orders-service",
+      description: "Handles orders: fast, reliable, and #1 in reviews.",
+      owner: "team-orders",
+      lifecycle: "experimental",
+    });
+
+    expect(createRes.status).toBe(200);
+    expect(createRes.text).toContain("Service created");
+
+    const generatedFile = await fs.readFile(
+      path.join(generatedDir, "orders-service", "catalog-info.yaml"),
+      "utf8",
+    );
+    const parsed = yaml.load(generatedFile);
+    const result = CatalogEntrySchema.safeParse(parsed);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.metadata.description).toBe(
+        "Handles orders: fast, reliable, and #1 in reviews.",
+      );
+    }
+
+    const detailRes = await request(app).get("/services/orders-service");
     expect(detailRes.status).toBe(200);
   });
 
