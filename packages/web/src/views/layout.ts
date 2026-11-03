@@ -1,3 +1,5 @@
+import { escapeHtml } from "./escape";
+
 const NAV_LINKS: Array<{ href: string; label: string }> = [
   { href: "/", label: "Catalog" },
   { href: "/teams", label: "Teams" },
@@ -16,7 +18,7 @@ export function layout(title: string, bodyHtml: string, activePath = ""): string
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title} · Internal Developer Portal</title>
+  <title>${escapeHtml(title)} · Internal Developer Portal</title>
   <link rel="stylesheet" href="/public/styles.css" />
 </head>
 <body>
