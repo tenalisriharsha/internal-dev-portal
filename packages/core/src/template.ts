@@ -21,18 +21,27 @@ function yamlScalar(value: string): string {
   return yaml.dump(value, { forceQuotes: true, quotingType: '"' }).trim();
 }
 
+function jsonScalar(value: string): string {
+  return JSON.stringify(value).slice(1, -1);
+}
+
+type EscapeMode = "yaml" | "json" | "none";
+
 function renderString(
   content: string,
   variables: TemplateVariables,
-  yamlSafe: boolean,
+  escapeMode: EscapeMode,
 ): string {
   return content.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) => {
     if (!(key in variables)) {
       throw new Error(`template references unknown variable "${key}"`);
     }
     const value = variables[key];
-    if (yamlSafe && !key.endsWith(RAW_YAML_SUFFIX)) {
+    if (escapeMode === "yaml" && !key.endsWith(RAW_YAML_SUFFIX)) {
       return yamlScalar(value);
+    }
+    if (escapeMode === "json") {
+      return jsonScalar(value);
     }
     return value;
   });
@@ -81,11 +90,15 @@ export async function renderTemplate(
     const targetRelative = relative.endsWith(".tmpl")
       ? relative.slice(0, -".tmpl".length)
       : relative;
-    const targetPath = path.join(outputDir, renderString(targetRelative, variables, false));
+    const targetPath = path.join(outputDir, renderString(targetRelative, variables, "none"));
 
     const raw = await fs.readFile(sourceFile, "utf8");
-    const isYaml = /\.ya?ml$/.test(targetRelative);
-    const rendered = renderString(raw, variables, isYaml);
+    const escapeMode: EscapeMode = /\.ya?ml$/.test(targetRelative)
+      ? "yaml"
+      : /\.json$/.test(targetRelative)
+        ? "json"
+        : "none";
+    const rendered = renderString(raw, variables, escapeMode);
 
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, rendered, "utf8");

@@ -106,6 +106,54 @@ describe("renderTemplate", () => {
     }
   });
 
+  it("escapes JSON-significant characters in substituted values so package.json parses", async () => {
+    await fs.writeFile(
+      path.join(templateDir, "package.json.tmpl"),
+      [
+        "{",
+        '  "name": "{{name}}",',
+        '  "version": "0.1.0",',
+        '  "private": true,',
+        '  "description": "{{description}}"',
+        "}",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const outputDir = path.join(outputRoot, "quote-test-service");
+    await renderTemplate(templateDir, outputDir, {
+      name: "quote-test-service",
+      description: 'Handles "premium" orders',
+      owner: "team-x",
+      lifecycle: "experimental",
+    });
+
+    const packageJson = await fs.readFile(path.join(outputDir, "package.json"), "utf8");
+    const parsed = JSON.parse(packageJson);
+    expect(parsed.description).toBe('Handles "premium" orders');
+  });
+
+  it("escapes backslashes in substituted values so package.json parses", async () => {
+    await fs.writeFile(
+      path.join(templateDir, "package.json.tmpl"),
+      ['{', '  "description": "{{description}}"', "}", ""].join("\n"),
+      "utf8",
+    );
+
+    const outputDir = path.join(outputRoot, "backslash-test-service");
+    await renderTemplate(templateDir, outputDir, {
+      name: "backslash-test-service",
+      description: "Handles C:\\orders\\ imports",
+      owner: "team-x",
+      lifecycle: "experimental",
+    });
+
+    const packageJson = await fs.readFile(path.join(outputDir, "package.json"), "utf8");
+    const parsed = JSON.parse(packageJson);
+    expect(parsed.description).toBe("Handles C:\\orders\\ imports");
+  });
+
   it("refuses to overwrite an existing output directory", async () => {
     const outputDir = path.join(outputRoot, "existing-service");
     await fs.mkdir(outputDir, { recursive: true });
