@@ -154,6 +154,41 @@ describe("renderTemplate", () => {
     expect(parsed.description).toBe("Handles C:\\orders\\ imports");
   });
 
+  it("escapes newlines in substituted values so a .ts comment can't be broken out of", async () => {
+    const outputDir = path.join(outputRoot, "multiline-service");
+    await renderTemplate(templateDir, outputDir, {
+      name: "multiline-service",
+      description: "line one\nexport function pwned(){return 1}\n// line three",
+      owner: "team-platform",
+      lifecycle: "experimental",
+    });
+
+    const indexTs = await fs.readFile(path.join(outputDir, "src", "index.ts"), "utf8");
+    const lines = indexTs.split("\n");
+    expect(lines[0].startsWith("//")).toBe(true);
+    expect(indexTs).not.toContain("export function pwned(){return 1}");
+  });
+
+  it("HTML-escapes substituted values in .html targets so markup can't be injected", async () => {
+    await fs.writeFile(
+      path.join(templateDir, "src", "index.html.tmpl"),
+      "<!doctype html>\n<html>\n  <body>\n    <p>{{description}}</p>\n  </body>\n</html>\n",
+      "utf8",
+    );
+
+    const outputDir = path.join(outputRoot, "xss-website");
+    await renderTemplate(templateDir, outputDir, {
+      name: "xss-website",
+      description: "<script>alert(1)</script>",
+      owner: "team-platform",
+      lifecycle: "experimental",
+    });
+
+    const indexHtml = await fs.readFile(path.join(outputDir, "src", "index.html"), "utf8");
+    expect(indexHtml).not.toContain("<script>alert(1)</script>");
+    expect(indexHtml).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  });
+
   it("refuses to overwrite an existing output directory", async () => {
     const outputDir = path.join(outputRoot, "existing-service");
     await fs.mkdir(outputDir, { recursive: true });

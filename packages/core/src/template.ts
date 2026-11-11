@@ -25,7 +25,27 @@ function jsonScalar(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
-type EscapeMode = "yaml" | "json" | "none";
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function htmlScalar(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+}
+
+/**
+ * A `//` line comment ends at the first line terminator, so anything after
+ * one would land as live, uncommented source rather than as escaped text.
+ */
+function tsScalar(value: string): string {
+  return value.split(/\r\n|\r|\n/)[0];
+}
+
+type EscapeMode = "yaml" | "json" | "html" | "ts" | "none";
 
 function renderString(
   content: string,
@@ -42,6 +62,12 @@ function renderString(
     }
     if (escapeMode === "json") {
       return jsonScalar(value);
+    }
+    if (escapeMode === "html") {
+      return htmlScalar(value);
+    }
+    if (escapeMode === "ts") {
+      return tsScalar(value);
     }
     return value;
   });
@@ -97,7 +123,11 @@ export async function renderTemplate(
       ? "yaml"
       : /\.json$/.test(targetRelative)
         ? "json"
-        : "none";
+        : /\.html?$/.test(targetRelative)
+          ? "html"
+          : /\.tsx?$/.test(targetRelative)
+            ? "ts"
+            : "none";
     const rendered = renderString(raw, variables, escapeMode);
 
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
