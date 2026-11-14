@@ -243,6 +243,22 @@ describe("GET /services/:name", () => {
     expect(res.text).toContain("Service not found");
   });
 
+  it("does not link to or count a dependsOn entry that has no matching catalog entry", async () => {
+    await writeExampleService("user-service");
+    await writeExampleService("checkout-web", ["user-service", "decommissioned-billing-service"]);
+    await refresh();
+
+    const res = await request(app).get("/services/checkout-web");
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("Depends on (1)");
+    expect(res.text).not.toContain("Depends on (2)");
+    expect(res.text).not.toContain("decommissioned-billing-service");
+
+    const missingRes = await request(app).get("/services/decommissioned-billing-service");
+    expect(missingRes.status).toBe(404);
+  });
+
   it("renders a health panel with open incidents and last deploy time", async () => {
     await writeExampleService("checkout-web", [], {
       health: { lastDeployAt: "2026-01-15T09:00:00Z", openIncidents: 2 },
