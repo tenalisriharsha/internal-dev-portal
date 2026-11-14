@@ -27,7 +27,11 @@ export function createCatalogRouter(options: AppOptions): Router {
     }
     const dependents = catalog.getDependents(entry.metadata.name);
     const source = displaySource(options.repoRoot, catalog.sourceFileFor(entry.metadata.name));
-    res.send(renderServiceDetail(entry, dependents, source, options.escalation ?? {}));
+    const resolvedEntry = {
+      ...entry,
+      spec: { ...entry.spec, dependsOn: entry.spec.dependsOn.filter((dep) => catalog.has(dep)) },
+    };
+    res.send(renderServiceDetail(resolvedEntry, dependents, source, options.escalation ?? {}));
   });
 
   return router;
