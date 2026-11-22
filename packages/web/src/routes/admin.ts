@@ -15,7 +15,11 @@ export function createAdminRouter(options: AppOptions): Router {
     await options.store.refresh(options.sources);
     const requested = typeof req.query.redirectTo === "string" ? req.query.redirectTo : "/";
     // Only ever redirect back into this app — reject anything that could send a browser elsewhere.
-    const redirectTo = requested.startsWith("/") && !requested.startsWith("//") ? requested : "/";
+    // Normalize backslashes before the check: browsers (and the WHATWG URL spec) treat a leading
+    // backslash the same as a leading forward slash for special schemes, so "/\evil.com" would
+    // otherwise slip past the "//" check and resolve to an off-site redirect.
+    const normalized = requested.replace(/\\/g, "/");
+    const redirectTo = requested.startsWith("/") && !normalized.startsWith("//") ? requested : "/";
     res.redirect(303, redirectTo);
   });
 
