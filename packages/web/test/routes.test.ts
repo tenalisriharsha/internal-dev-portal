@@ -395,6 +395,15 @@ describe("POST /admin/refresh", () => {
     expect(res.headers.location).toBe("/");
   });
 
+  it("only redirects to a local path, never an external one via a backslash bypass", async () => {
+    const res = await request(app)
+      .post("/admin/refresh")
+      .query({ redirectTo: "/\\evil.com" });
+    expect(res.status).toBe(303);
+    expect(res.headers.location).toBe("/");
+    expect(new URL(res.headers.location, "http://localhost/foo").hostname).toBe("localhost");
+  });
+
   it("redirects to an allowed local path when given one", async () => {
     await writeExampleService("graphed-service");
     const res = await request(app).post("/admin/refresh").query({ redirectTo: "/graph" });
